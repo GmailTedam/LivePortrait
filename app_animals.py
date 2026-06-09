@@ -34,25 +34,28 @@ args = tyro.cli(ArgumentConfig)
 
 ffmpeg_dir = os.path.join(os.getcwd(), "ffmpeg")
 if osp.exists(ffmpeg_dir):
-    os.environ["PATH"] += (os.pathsep + ffmpeg_dir)
+    os.environ["PATH"] += os.pathsep + ffmpeg_dir
 
 if not fast_check_ffmpeg():
     raise ImportError(
         "FFmpeg is not installed. Please install FFmpeg (including ffmpeg and ffprobe) before running this script. https://ffmpeg.org/download.html"
     )
 # specify configs for inference
-inference_cfg = partial_fields(InferenceConfig, args.__dict__)  # use attribute of args to initial InferenceConfig
-crop_cfg = partial_fields(CropConfig, args.__dict__)  # use attribute of args to initial CropConfig
+inference_cfg = partial_fields(
+    InferenceConfig, args.__dict__
+)  # use attribute of args to initial InferenceConfig
+crop_cfg = partial_fields(
+    CropConfig, args.__dict__
+)  # use attribute of args to initial CropConfig
 
 gradio_pipeline_animal: GradioPipelineAnimal = GradioPipelineAnimal(
-    inference_cfg=inference_cfg,
-    crop_cfg=crop_cfg,
-    args=args
+    inference_cfg=inference_cfg, crop_cfg=crop_cfg, args=args
 )
 
-if args.gradio_temp_dir not in (None, ''):
+if args.gradio_temp_dir not in (None, ""):
     os.environ["GRADIO_TEMP_DIR"] = args.gradio_temp_dir
     os.makedirs(args.gradio_temp_dir, exist_ok=True)
+
 
 def gpu_wrapped_execute_video(*args, **kwargs):
     return gradio_pipeline_animal.execute_video(*args, **kwargs)
@@ -63,14 +66,56 @@ title_md = "assets/gradio/gradio_title.md"
 example_portrait_dir = "assets/examples/source"
 example_video_dir = "assets/examples/driving"
 data_examples_i2v = [
-    [osp.join(example_portrait_dir, "s41.jpg"), osp.join(example_video_dir, "d3.mp4"), True, False, False, False],
-    [osp.join(example_portrait_dir, "s40.jpg"), osp.join(example_video_dir, "d6.mp4"), True, False, False, False],
-    [osp.join(example_portrait_dir, "s25.jpg"), osp.join(example_video_dir, "d19.mp4"), True, False, False, False],
+    [
+        osp.join(example_portrait_dir, "s41.jpg"),
+        osp.join(example_video_dir, "d3.mp4"),
+        True,
+        False,
+        False,
+        False,
+    ],
+    [
+        osp.join(example_portrait_dir, "s40.jpg"),
+        osp.join(example_video_dir, "d6.mp4"),
+        True,
+        False,
+        False,
+        False,
+    ],
+    [
+        osp.join(example_portrait_dir, "s25.jpg"),
+        osp.join(example_video_dir, "d19.mp4"),
+        True,
+        False,
+        False,
+        False,
+    ],
 ]
 data_examples_i2v_pickle = [
-    [osp.join(example_portrait_dir, "s25.jpg"), osp.join(example_video_dir, "wink.pkl"), True, False, False, False],
-    [osp.join(example_portrait_dir, "s40.jpg"), osp.join(example_video_dir, "talking.pkl"), True, False, False, False],
-    [osp.join(example_portrait_dir, "s41.jpg"), osp.join(example_video_dir, "aggrieved.pkl"), True, False, False, False],
+    [
+        osp.join(example_portrait_dir, "s25.jpg"),
+        osp.join(example_video_dir, "wink.pkl"),
+        True,
+        False,
+        False,
+        False,
+    ],
+    [
+        osp.join(example_portrait_dir, "s40.jpg"),
+        osp.join(example_video_dir, "talking.pkl"),
+        True,
+        False,
+        False,
+        False,
+    ],
+    [
+        osp.join(example_portrait_dir, "s41.jpg"),
+        osp.join(example_video_dir, "aggrieved.pkl"),
+        True,
+        False,
+        False,
+        False,
+    ],
 ]
 #################### interface logic ####################
 
@@ -82,7 +127,9 @@ output_video_concat_i2v = gr.Video(autoplay=False)
 output_video_i2v_gif = gr.Image(type="numpy")
 
 
-with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")])) as demo:
+with gr.Blocks(
+    theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")])
+) as demo:
     gr.HTML(load_description(title_md))
 
     gr.Markdown(load_description("assets/gradio/gradio_description_upload_animal.md"))
@@ -109,10 +156,30 @@ with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta San
 
             with gr.Accordion(open=True, label="Cropping Options for Source Image"):
                 with gr.Row():
-                    flag_do_crop_input = gr.Checkbox(value=True, label="do crop (source)")
-                    scale = gr.Number(value=2.3, label="source crop scale", minimum=1.8, maximum=3.2, step=0.05)
-                    vx_ratio = gr.Number(value=0.0, label="source crop x", minimum=-0.5, maximum=0.5, step=0.01)
-                    vy_ratio = gr.Number(value=-0.125, label="source crop y", minimum=-0.5, maximum=0.5, step=0.01)
+                    flag_do_crop_input = gr.Checkbox(
+                        value=True, label="do crop (source)"
+                    )
+                    scale = gr.Number(
+                        value=2.3,
+                        label="source crop scale",
+                        minimum=1.8,
+                        maximum=3.2,
+                        step=0.05,
+                    )
+                    vx_ratio = gr.Number(
+                        value=0.0,
+                        label="source crop x",
+                        minimum=-0.5,
+                        maximum=0.5,
+                        step=0.01,
+                    )
+                    vy_ratio = gr.Number(
+                        value=-0.125,
+                        label="source crop y",
+                        minimum=-0.5,
+                        maximum=0.5,
+                        step=0.01,
+                    )
 
         with gr.Column():
             with gr.Tabs():
@@ -153,33 +220,76 @@ with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta San
                     tab_video.select(lambda: "Video", None, tab_selection)
             with gr.Accordion(open=True, label="Cropping Options for Driving Video"):
                 with gr.Row():
-                    flag_crop_driving_video_input = gr.Checkbox(value=False, label="do crop (driving)")
-                    scale_crop_driving_video = gr.Number(value=2.2, label="driving crop scale", minimum=1.8, maximum=3.2, step=0.05)
-                    vx_ratio_crop_driving_video = gr.Number(value=0.0, label="driving crop x", minimum=-0.5, maximum=0.5, step=0.01)
-                    vy_ratio_crop_driving_video = gr.Number(value=-0.1, label="driving crop y", minimum=-0.5, maximum=0.5, step=0.01)
+                    flag_crop_driving_video_input = gr.Checkbox(
+                        value=False, label="do crop (driving)"
+                    )
+                    scale_crop_driving_video = gr.Number(
+                        value=2.2,
+                        label="driving crop scale",
+                        minimum=1.8,
+                        maximum=3.2,
+                        step=0.05,
+                    )
+                    vx_ratio_crop_driving_video = gr.Number(
+                        value=0.0,
+                        label="driving crop x",
+                        minimum=-0.5,
+                        maximum=0.5,
+                        step=0.01,
+                    )
+                    vy_ratio_crop_driving_video = gr.Number(
+                        value=-0.1,
+                        label="driving crop y",
+                        minimum=-0.5,
+                        maximum=0.5,
+                        step=0.01,
+                    )
 
     with gr.Row():
         with gr.Accordion(open=False, label="Animation Options"):
             with gr.Row():
-                flag_stitching = gr.Checkbox(value=False, label="stitching (not recommended)")
-                flag_remap_input = gr.Checkbox(value=False, label="paste-back (not recommended)")
-                driving_multiplier = gr.Number(value=1.0, label="driving multiplier", minimum=0.0, maximum=2.0, step=0.02)
+                flag_stitching = gr.Checkbox(
+                    value=False, label="stitching (not recommended)"
+                )
+                flag_remap_input = gr.Checkbox(
+                    value=False, label="paste-back (not recommended)"
+                )
+                driving_multiplier = gr.Number(
+                    value=1.0,
+                    label="driving multiplier",
+                    minimum=0.0,
+                    maximum=2.0,
+                    step=0.02,
+                )
 
     gr.Markdown(load_description("assets/gradio/gradio_description_animate_clear.md"))
     with gr.Row():
         process_button_animation = gr.Button("🚀 Animate", variant="primary")
     with gr.Row():
         with gr.Column():
-            with gr.Accordion(open=True, label="The animated video in the cropped image space"):
+            with gr.Accordion(
+                open=True, label="The animated video in the cropped image space"
+            ):
                 output_video_i2v.render()
         with gr.Column():
-            with gr.Accordion(open=True, label="The animated gif in the cropped image space"):
+            with gr.Accordion(
+                open=True, label="The animated gif in the cropped image space"
+            ):
                 output_video_i2v_gif.render()
         with gr.Column():
             with gr.Accordion(open=True, label="The animated video"):
                 output_video_concat_i2v.render()
     with gr.Row():
-        process_button_reset = gr.ClearButton([source_image_input, driving_video_input, output_video_i2v, output_video_concat_i2v, output_video_i2v_gif], value="🧹 Clear")
+        process_button_reset = gr.ClearButton(
+            [
+                source_image_input,
+                driving_video_input,
+                output_video_i2v,
+                output_video_concat_i2v,
+                output_video_i2v_gif,
+            ],
+            value="🧹 Clear",
+        )
 
     with gr.Row():
         # Examples
@@ -198,7 +308,11 @@ with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta San
                         flag_remap_input,
                         flag_crop_driving_video_input,
                     ],
-                    outputs=[output_image, output_image_paste_back, output_video_i2v_gif],
+                    outputs=[
+                        output_image,
+                        output_image_paste_back,
+                        output_video_i2v_gif,
+                    ],
                     examples_per_page=len(data_examples_i2v_pickle),
                     cache_examples=False,
                 )
@@ -214,7 +328,11 @@ with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta San
                         flag_remap_input,
                         flag_crop_driving_video_input,
                     ],
-                    outputs=[output_image, output_image_paste_back, output_video_i2v_gif],
+                    outputs=[
+                        output_image,
+                        output_image_paste_back,
+                        output_video_i2v_gif,
+                    ],
                     examples_per_page=len(data_examples_i2v),
                     cache_examples=False,
                 )
@@ -239,11 +357,9 @@ with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta San
             tab_selection,
         ],
         outputs=[output_video_i2v, output_video_concat_i2v, output_video_i2v_gif],
-        show_progress=True
+        show_progress=True,
     )
 
 demo.launch(
-    server_port=args.server_port,
-    share=args.share,
-    server_name=args.server_name
+    server_port=args.server_port, share=args.share, server_name=args.server_name
 )

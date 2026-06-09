@@ -14,7 +14,7 @@ from torch import nn
 from typing import List
 
 from util.keypoint_ops import keypoint_xyzxyz_to_xyxyzz
-from util.misc import NestedTensor, nested_tensor_from_tensor_list,inverse_sigmoid
+from util.misc import NestedTensor, nested_tensor_from_tensor_list, inverse_sigmoid
 
 from .utils import MLP
 from .backbone import build_backbone
@@ -24,39 +24,43 @@ from .deformable_transformer import build_deformable_transformer
 
 
 class UniPose(nn.Module):
-    """ This is the Cross-Attention Detector module that performs object detection """
+    """This is the Cross-Attention Detector module that performs object detection"""
 
-    def __init__(self, backbone, transformer, num_classes, num_queries,
-                 aux_loss=False, iter_update=False,
-                 query_dim=2,
-                 random_refpoints_xy=False,
-                 fix_refpoints_hw=-1,
-                 num_feature_levels=1,
-                 nheads=8,
-                 # two stage
-                 two_stage_type='no',  # ['no', 'standard']
-                 two_stage_add_query_num=0,
-                 dec_pred_class_embed_share=True,
-                 dec_pred_bbox_embed_share=True,
-                 two_stage_class_embed_share=True,
-                 two_stage_bbox_embed_share=True,
-                 decoder_sa_type='sa',
-                 num_patterns=0,
-                 dn_number=100,
-                 dn_box_noise_scale=0.4,
-                 dn_label_noise_ratio=0.5,
-                 dn_labelbook_size=100,
-                 use_label_enc=True,
-
-                 text_encoder_type='bert-base-uncased',
-
-                 binary_query_selection=False,
-                 use_cdn=True,
-                 sub_sentence_present=True,
-                 num_body_points=68,
-                 num_box_decoder_layers=2,
-                 ):
-        """ Initializes the model.
+    def __init__(
+        self,
+        backbone,
+        transformer,
+        num_classes,
+        num_queries,
+        aux_loss=False,
+        iter_update=False,
+        query_dim=2,
+        random_refpoints_xy=False,
+        fix_refpoints_hw=-1,
+        num_feature_levels=1,
+        nheads=8,
+        # two stage
+        two_stage_type="no",  # ['no', 'standard']
+        two_stage_add_query_num=0,
+        dec_pred_class_embed_share=True,
+        dec_pred_bbox_embed_share=True,
+        two_stage_class_embed_share=True,
+        two_stage_bbox_embed_share=True,
+        decoder_sa_type="sa",
+        num_patterns=0,
+        dn_number=100,
+        dn_box_noise_scale=0.4,
+        dn_label_noise_ratio=0.5,
+        dn_labelbook_size=100,
+        use_label_enc=True,
+        text_encoder_type="bert-base-uncased",
+        binary_query_selection=False,
+        use_cdn=True,
+        sub_sentence_present=True,
+        num_body_points=68,
+        num_box_decoder_layers=2,
+    ):
+        """Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
             transformer: torch module of the transformer architecture. See transformer.py
@@ -100,11 +104,9 @@ class UniPose(nn.Module):
         self.dn_labelbook_size = dn_labelbook_size
         self.use_cdn = use_cdn
 
-
         self.projection = MLP(512, hidden_dim, hidden_dim, 3)
 
         self.projection_kpt = MLP(512, hidden_dim, hidden_dim, 3)
-
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # model, _ = clip.load("ViT-B/32", device=device)
@@ -123,24 +125,35 @@ class UniPose(nn.Module):
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.num_channels[_]
-                input_proj_list.append(nn.Sequential(
-                    nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
-                    nn.GroupNorm(32, hidden_dim),
-                ))
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
+                        nn.GroupNorm(32, hidden_dim),
+                    )
+                )
             for _ in range(num_feature_levels - num_backbone_outs):
-                input_proj_list.append(nn.Sequential(
-                    nn.Conv2d(in_channels, hidden_dim, kernel_size=3, stride=2, padding=1),
-                    nn.GroupNorm(32, hidden_dim),
-                ))
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(
+                            in_channels, hidden_dim, kernel_size=3, stride=2, padding=1
+                        ),
+                        nn.GroupNorm(32, hidden_dim),
+                    )
+                )
                 in_channels = hidden_dim
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            assert two_stage_type == 'no', "two_stage_type should be no if num_feature_levels=1 !!!"
-            self.input_proj = nn.ModuleList([
-                nn.Sequential(
-                    nn.Conv2d(backbone.num_channels[-1], hidden_dim, kernel_size=1),
-                    nn.GroupNorm(32, hidden_dim),
-                )])
+            assert two_stage_type == "no", (
+                "two_stage_type should be no if num_feature_levels=1 !!!"
+            )
+            self.input_proj = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(backbone.num_channels[-1], hidden_dim, kernel_size=1),
+                        nn.GroupNorm(32, hidden_dim),
+                    )
+                ]
+            )
 
         self.backbone = backbone
         self.aux_loss = aux_loss
@@ -155,8 +168,6 @@ class UniPose(nn.Module):
         # prepare class & box embed
         _class_embed = ContrastiveAssign()
 
-
-
         _bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
@@ -167,26 +178,43 @@ class UniPose(nn.Module):
         nn.init.constant_(_pose_embed.layers[-1].bias.data, 0)
 
         if dec_pred_bbox_embed_share:
-            box_embed_layerlist = [_bbox_embed for i in range(transformer.num_decoder_layers)]
+            box_embed_layerlist = [
+                _bbox_embed for i in range(transformer.num_decoder_layers)
+            ]
         else:
-            box_embed_layerlist = [copy.deepcopy(_bbox_embed) for i in range(transformer.num_decoder_layers)]
+            box_embed_layerlist = [
+                copy.deepcopy(_bbox_embed)
+                for i in range(transformer.num_decoder_layers)
+            ]
         if dec_pred_class_embed_share:
-            class_embed_layerlist = [_class_embed for i in range(transformer.num_decoder_layers)]
+            class_embed_layerlist = [
+                _class_embed for i in range(transformer.num_decoder_layers)
+            ]
         else:
-            class_embed_layerlist = [copy.deepcopy(_class_embed) for i in range(transformer.num_decoder_layers)]
-
+            class_embed_layerlist = [
+                copy.deepcopy(_class_embed)
+                for i in range(transformer.num_decoder_layers)
+            ]
 
         if dec_pred_bbox_embed_share:
-
-            pose_embed_layerlist = [_pose_embed for i in
-                                    range(transformer.num_decoder_layers - num_box_decoder_layers + 1)]
+            pose_embed_layerlist = [
+                _pose_embed
+                for i in range(
+                    transformer.num_decoder_layers - num_box_decoder_layers + 1
+                )
+            ]
         else:
-            pose_embed_layerlist = [copy.deepcopy(_pose_embed) for i in
-                                    range(transformer.num_decoder_layers - num_box_decoder_layers + 1)]
+            pose_embed_layerlist = [
+                copy.deepcopy(_pose_embed)
+                for i in range(
+                    transformer.num_decoder_layers - num_box_decoder_layers + 1
+                )
+            ]
 
-        pose_hw_embed_layerlist = [_pose_hw_embed for i in
-                                   range(transformer.num_decoder_layers - num_box_decoder_layers)]
-
+        pose_hw_embed_layerlist = [
+            _pose_hw_embed
+            for i in range(transformer.num_decoder_layers - num_box_decoder_layers)
+        ]
 
         self.num_box_decoder_layers = num_box_decoder_layers
         self.bbox_embed = nn.ModuleList(box_embed_layerlist)
@@ -203,12 +231,13 @@ class UniPose(nn.Module):
 
         self.transformer.decoder.num_body_points = num_body_points
 
-
         # two stage
         self.two_stage_type = two_stage_type
         self.two_stage_add_query_num = two_stage_add_query_num
-        assert two_stage_type in ['no', 'standard'], "unknown param {} of two_stage_type".format(two_stage_type)
-        if two_stage_type != 'no':
+        assert two_stage_type in ["no", "standard"], (
+            "unknown param {} of two_stage_type".format(two_stage_type)
+        )
+        if two_stage_type != "no":
             if two_stage_bbox_embed_share:
                 assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
                 self.transformer.enc_out_bbox_embed = _bbox_embed
@@ -226,9 +255,9 @@ class UniPose(nn.Module):
                 self.init_ref_points(two_stage_add_query_num)
 
         self.decoder_sa_type = decoder_sa_type
-        assert decoder_sa_type in ['sa', 'ca_label', 'ca_content']
+        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
         # self.replace_sa_with_double_ca = replace_sa_with_double_ca
-        if decoder_sa_type == 'ca_label':
+        if decoder_sa_type == "ca_label":
             self.label_embedding = nn.Embedding(num_classes, hidden_dim)
             for layer in self.transformer.decoder.layers:
                 layer.label_embedding = self.label_embedding
@@ -241,25 +270,25 @@ class UniPose(nn.Module):
 
     def open_set_transfer_init(self):
         for name, param in self.named_parameters():
-            if 'fusion_layers' in name:
+            if "fusion_layers" in name:
                 continue
-            if 'ca_text' in name:
+            if "ca_text" in name:
                 continue
-            if 'catext_norm' in name:
+            if "catext_norm" in name:
                 continue
-            if 'catext_dropout' in name:
+            if "catext_dropout" in name:
                 continue
             if "text_layers" in name:
                 continue
-            if 'bert' in name:
+            if "bert" in name:
                 continue
-            if 'bbox_embed' in name:
+            if "bbox_embed" in name:
                 continue
-            if 'label_enc.weight' in name:
+            if "label_enc.weight" in name:
                 continue
-            if 'feat_map' in name:
+            if "feat_map" in name:
                 continue
-            if 'enc_output' in name:
+            if "enc_output" in name:
                 continue
 
             param.requires_grad_(False)
@@ -278,89 +307,125 @@ class UniPose(nn.Module):
         if self.random_refpoints_xy:
             # import ipdb; ipdb.set_trace()
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
         if self.fix_refpoints_hw > 0:
             print("fix_refpoints_hw: {}".format(self.fix_refpoints_hw))
             assert self.random_refpoints_xy
             self.refpoint_embed.weight.data[:, 2:] = self.fix_refpoints_hw
-            self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(self.refpoint_embed.weight.data[:, 2:])
+            self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, 2:]
+            )
             self.refpoint_embed.weight.data[:, 2:].requires_grad = False
         elif int(self.fix_refpoints_hw) == -1:
             pass
         elif int(self.fix_refpoints_hw) == -2:
-            print('learn a shared h and w')
+            print("learn a shared h and w")
             assert self.random_refpoints_xy
             self.refpoint_embed = nn.Embedding(use_num_queries, 2)
             self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
             self.hw_embed = nn.Embedding(1, 1)
         else:
-            raise NotImplementedError('Unknown fix_refpoints_hw {}'.format(self.fix_refpoints_hw))
+            raise NotImplementedError(
+                "Unknown fix_refpoints_hw {}".format(self.fix_refpoints_hw)
+            )
 
     def forward(self, samples: NestedTensor, targets: List = None, **kw):
-        """ The forward expects a NestedTensor, which consists of:
-               - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
-               - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
+        """The forward expects a NestedTensor, which consists of:
+           - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
+           - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
 
-            It returns a dict with the following elements:
-               - "pred_logits": the classification logits (including no-object) for all queries.
-                                Shape= [batch_size x num_queries x num_classes]
-               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
-                               (center_x, center_y, width, height). These values are normalized in [0, 1],
-                               relative to the size of each individual image (disregarding possible padding).
-                               See PostProcess for information on how to retrieve the unnormalized bounding box.
-               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
-                                dictionnaries containing the two above keys for each decoder layer.
+        It returns a dict with the following elements:
+           - "pred_logits": the classification logits (including no-object) for all queries.
+                            Shape= [batch_size x num_queries x num_classes]
+           - "pred_boxes": The normalized boxes coordinates for all queries, represented as
+                           (center_x, center_y, width, height). These values are normalized in [0, 1],
+                           relative to the size of each individual image (disregarding possible padding).
+                           See PostProcess for information on how to retrieve the unnormalized bounding box.
+           - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
+                            dictionnaries containing the two above keys for each decoder layer.
         """
 
-        captions = [t['instance_text_prompt'] for t in targets]
-        bs=len(captions)
+        captions = [t["instance_text_prompt"] for t in targets]
+        bs = len(captions)
         tensor_list = [tgt["object_embeddings_text"] for tgt in targets]
         max_size = 350
-        padded_tensors = [torch.cat([tensor, torch.zeros(max_size - tensor.size(0), tensor.size(1),device=tensor.device)]) if tensor.size(0) < max_size else tensor for tensor in tensor_list]
+        padded_tensors = [
+            torch.cat(
+                [
+                    tensor,
+                    torch.zeros(
+                        max_size - tensor.size(0), tensor.size(1), device=tensor.device
+                    ),
+                ]
+            )
+            if tensor.size(0) < max_size
+            else tensor
+            for tensor in tensor_list
+        ]
         object_embeddings_text = torch.stack(padded_tensors)
 
-        kpts_embeddings_text = torch.stack([tgt["kpts_embeddings_text"] for tgt in targets])[:, :self.num_body_points]
-        encoded_text=self.projection(object_embeddings_text) # bs, 81, 101, 256
-        kpt_embeddings_specific=self.projection_kpt(kpts_embeddings_text) # bs, 81, 101, 256
+        kpts_embeddings_text = torch.stack(
+            [tgt["kpts_embeddings_text"] for tgt in targets]
+        )[:, : self.num_body_points]
+        encoded_text = self.projection(object_embeddings_text)  # bs, 81, 101, 256
+        kpt_embeddings_specific = self.projection_kpt(
+            kpts_embeddings_text
+        )  # bs, 81, 101, 256
 
+        kpt_vis = torch.stack([tgt["kpt_vis_text"] for tgt in targets])[
+            :, : self.num_body_points
+        ]
+        kpt_mask = torch.cat(
+            (
+                torch.ones_like(kpt_vis, device=kpt_vis.device)[..., 0].unsqueeze(-1),
+                kpt_vis,
+            ),
+            dim=-1,
+        )
 
-        kpt_vis = torch.stack([tgt["kpt_vis_text"] for tgt in targets])[:, :self.num_body_points]
-        kpt_mask = torch.cat((torch.ones_like(kpt_vis, device=kpt_vis.device)[..., 0].unsqueeze(-1), kpt_vis), dim=-1)
-
-
-        num_classes = encoded_text.shape[1] # bs, 81, 101, 256
-        text_self_attention_masks = torch.eye(num_classes).unsqueeze(0).expand(bs, -1, -1).bool().to(samples.device)
-        text_token_mask = torch.zeros(samples.shape[0],num_classes).to(samples.device)>0
+        num_classes = encoded_text.shape[1]  # bs, 81, 101, 256
+        text_self_attention_masks = (
+            torch.eye(num_classes)
+            .unsqueeze(0)
+            .expand(bs, -1, -1)
+            .bool()
+            .to(samples.device)
+        )
+        text_token_mask = (
+            torch.zeros(samples.shape[0], num_classes).to(samples.device) > 0
+        )
         for i in range(bs):
-            text_token_mask[i,:len(captions[i])]=True
+            text_token_mask[i, : len(captions[i])] = True
 
         position_ids = torch.zeros(samples.shape[0], num_classes).to(samples.device)
 
         for i in range(bs):
-            position_ids[i,:len(captions[i])]= 1
-
+            position_ids[i, : len(captions[i])] = 1
 
         text_dict = {
-            'encoded_text': encoded_text, # bs, 195, d_model
-            'text_token_mask': text_token_mask, # bs, 195
-            'position_ids': position_ids, # bs, 195
-            'text_self_attention_masks': text_self_attention_masks # bs, 195,195
+            "encoded_text": encoded_text,  # bs, 195, d_model
+            "text_token_mask": text_token_mask,  # bs, 195
+            "position_ids": position_ids,  # bs, 195
+            "text_self_attention_masks": text_self_attention_masks,  # bs, 195,195
         }
-
 
         # import ipdb; ipdb.set_trace()
 
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         features, poss = self.backbone(samples)
-        if os.environ.get("SHILONG_AMP_INFNAN_DEBUG") == '1':
-            import ipdb;
-            ipdb.set_trace()
+        if os.environ.get("SHILONG_AMP_INFNAN_DEBUG") == "1":
+            import ipdb
 
+            ipdb.set_trace()
 
         srcs = []
         masks = []
@@ -378,7 +443,9 @@ class UniPose(nn.Module):
                 else:
                     src = self.input_proj[l](srcs[-1])
                 m = samples.mask
-                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(
+                    torch.bool
+                )[0]
                 pos_l = self.backbone[1](NestedTensor(src, mask)).to(src.dtype)
                 srcs.append(src)
                 masks.append(mask)
@@ -390,16 +457,28 @@ class UniPose(nn.Module):
             raise NotImplementedError
             label_enc = encoded_text
         if self.dn_number > 0 or targets is not None:
-            input_query_label, input_query_bbox, attn_mask, attn_mask2, dn_meta = \
+            input_query_label, input_query_bbox, attn_mask, attn_mask2, dn_meta = (
                 prepare_for_mask(kpt_mask=kpt_mask)
+            )
         else:
             assert targets is None
-            input_query_bbox = input_query_label = attn_mask = attn_mask2 = dn_meta = None
+            input_query_bbox = input_query_label = attn_mask = attn_mask2 = dn_meta = (
+                None
+            )
 
-
-        hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(srcs, masks, input_query_bbox, poss,
-                                                                                 input_query_label, attn_mask, attn_mask2,
-                                                                                 text_dict, dn_meta,targets,kpt_embeddings_specific)
+        hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(
+            srcs,
+            masks,
+            input_query_bbox,
+            poss,
+            input_query_label,
+            attn_mask,
+            attn_mask2,
+            text_dict,
+            dn_meta,
+            targets,
+            kpt_embeddings_specific,
+        )
 
         # In case num object=0
         if self.label_enc is not None:
@@ -410,15 +489,16 @@ class UniPose(nn.Module):
         hs[0] += self.padding.weight[0, 0] * 0.0
 
         num_group = 50
-        effective_dn_number = dn_meta['pad_size'] if self.training else 0
+        effective_dn_number = dn_meta["pad_size"] if self.training else 0
         outputs_coord_list = []
         outputs_class = []
 
-
-        for dec_lid, (layer_ref_sig, layer_bbox_embed, layer_cls_embed, layer_hs) in enumerate(
-                zip(reference[:-1], self.bbox_embed, self.class_embed, hs)):
-
-
+        for dec_lid, (
+            layer_ref_sig,
+            layer_bbox_embed,
+            layer_cls_embed,
+            layer_hs,
+        ) in enumerate(zip(reference[:-1], self.bbox_embed, self.class_embed, hs)):
             if dec_lid < self.num_box_decoder_layers:
                 layer_delta_unsig = layer_bbox_embed(layer_hs)
                 layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
@@ -427,22 +507,31 @@ class UniPose(nn.Module):
                 outputs_coord_list.append(layer_outputs_unsig)
                 outputs_class.append(layer_cls)
 
-
             else:
-
                 layer_hs_bbox_dn = layer_hs[:, :effective_dn_number, :]
-                layer_hs_bbox_norm = layer_hs[:, effective_dn_number:, :][:, 0::(self.num_body_points + 1), :]
+                layer_hs_bbox_norm = layer_hs[:, effective_dn_number:, :][
+                    :, 0 :: (self.num_body_points + 1), :
+                ]
                 bs = layer_ref_sig.shape[0]
-                reference_before_sigmoid_bbox_dn = layer_ref_sig[:, :effective_dn_number, :]
-                reference_before_sigmoid_bbox_norm = layer_ref_sig[:, effective_dn_number:, :][:,
-                                                     0::(self.num_body_points + 1), :]
+                reference_before_sigmoid_bbox_dn = layer_ref_sig[
+                    :, :effective_dn_number, :
+                ]
+                reference_before_sigmoid_bbox_norm = layer_ref_sig[
+                    :, effective_dn_number:, :
+                ][:, 0 :: (self.num_body_points + 1), :]
                 layer_delta_unsig_dn = layer_bbox_embed(layer_hs_bbox_dn)
                 layer_delta_unsig_norm = layer_bbox_embed(layer_hs_bbox_norm)
-                layer_outputs_unsig_dn = layer_delta_unsig_dn + inverse_sigmoid(reference_before_sigmoid_bbox_dn)
+                layer_outputs_unsig_dn = layer_delta_unsig_dn + inverse_sigmoid(
+                    reference_before_sigmoid_bbox_dn
+                )
                 layer_outputs_unsig_dn = layer_outputs_unsig_dn.sigmoid()
-                layer_outputs_unsig_norm = layer_delta_unsig_norm + inverse_sigmoid(reference_before_sigmoid_bbox_norm)
+                layer_outputs_unsig_norm = layer_delta_unsig_norm + inverse_sigmoid(
+                    reference_before_sigmoid_bbox_norm
+                )
                 layer_outputs_unsig_norm = layer_outputs_unsig_norm.sigmoid()
-                layer_outputs_unsig = torch.cat((layer_outputs_unsig_dn, layer_outputs_unsig_norm), dim=1)
+                layer_outputs_unsig = torch.cat(
+                    (layer_outputs_unsig_dn, layer_outputs_unsig_norm), dim=1
+                )
                 layer_cls_dn = layer_cls_embed(layer_hs_bbox_dn, text_dict)
                 layer_cls_norm = layer_cls_embed(layer_hs_bbox_norm, text_dict)
                 layer_cls = torch.cat((layer_cls_dn, layer_cls_norm), dim=1)
@@ -452,43 +541,75 @@ class UniPose(nn.Module):
         # update keypoints
         outputs_keypoints_list = []
         outputs_keypoints_hw = []
-        kpt_index = [x for x in range(num_group * (self.num_body_points + 1)) if x % (self.num_body_points + 1) != 0]
+        kpt_index = [
+            x
+            for x in range(num_group * (self.num_body_points + 1))
+            if x % (self.num_body_points + 1) != 0
+        ]
         for dec_lid, (layer_ref_sig, layer_hs) in enumerate(zip(reference[:-1], hs)):
             if dec_lid < self.num_box_decoder_layers:
                 assert isinstance(layer_hs, torch.Tensor)
                 bs = layer_hs.shape[0]
-                layer_res = layer_hs.new_zeros((bs, self.num_queries, self.num_body_points * 3))
+                layer_res = layer_hs.new_zeros(
+                    (bs, self.num_queries, self.num_body_points * 3)
+                )
                 outputs_keypoints_list.append(layer_res)
             else:
                 bs = layer_ref_sig.shape[0]
-                layer_hs_kpt = layer_hs[:, effective_dn_number:, :].index_select(1, torch.tensor(kpt_index,
-                                                                                                 device=layer_hs.device))
-                delta_xy_unsig = self.pose_embed[dec_lid - self.num_box_decoder_layers](layer_hs_kpt)
-                layer_ref_sig_kpt = layer_ref_sig[:, effective_dn_number:, :].index_select(1, torch.tensor(kpt_index,
-                                                                                                           device=layer_hs.device))
-                layer_outputs_unsig_keypoints = delta_xy_unsig + inverse_sigmoid(layer_ref_sig_kpt[..., :2])
-                vis_xy_unsig = torch.ones_like(layer_outputs_unsig_keypoints,
-                                               device=layer_outputs_unsig_keypoints.device)
-                xyv = torch.cat((layer_outputs_unsig_keypoints, vis_xy_unsig[:, :, 0].unsqueeze(-1)), dim=-1)
+                layer_hs_kpt = layer_hs[:, effective_dn_number:, :].index_select(
+                    1, torch.tensor(kpt_index, device=layer_hs.device)
+                )
+                delta_xy_unsig = self.pose_embed[dec_lid - self.num_box_decoder_layers](
+                    layer_hs_kpt
+                )
+                layer_ref_sig_kpt = layer_ref_sig[
+                    :, effective_dn_number:, :
+                ].index_select(1, torch.tensor(kpt_index, device=layer_hs.device))
+                layer_outputs_unsig_keypoints = delta_xy_unsig + inverse_sigmoid(
+                    layer_ref_sig_kpt[..., :2]
+                )
+                vis_xy_unsig = torch.ones_like(
+                    layer_outputs_unsig_keypoints,
+                    device=layer_outputs_unsig_keypoints.device,
+                )
+                xyv = torch.cat(
+                    (
+                        layer_outputs_unsig_keypoints,
+                        vis_xy_unsig[:, :, 0].unsqueeze(-1),
+                    ),
+                    dim=-1,
+                )
                 xyv = xyv.sigmoid()
-                layer_res = xyv.reshape((bs, num_group, self.num_body_points, 3)).flatten(2, 3)
-                layer_hw = layer_ref_sig_kpt[..., 2:].reshape(bs, num_group, self.num_body_points, 2).flatten(2, 3)
+                layer_res = xyv.reshape(
+                    (bs, num_group, self.num_body_points, 3)
+                ).flatten(2, 3)
+                layer_hw = (
+                    layer_ref_sig_kpt[..., 2:]
+                    .reshape(bs, num_group, self.num_body_points, 2)
+                    .flatten(2, 3)
+                )
                 layer_res = keypoint_xyzxyz_to_xyxyzz(layer_res)
                 outputs_keypoints_list.append(layer_res)
                 outputs_keypoints_hw.append(layer_hw)
 
-
         if self.dn_number > 0 and dn_meta is not None:
-            outputs_class, outputs_coord_list = \
-                post_process(outputs_class, outputs_coord_list,
-                                dn_meta, self.aux_loss, self._set_aux_loss)
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord_list[-1],
-               'pred_keypoints': outputs_keypoints_list[-1]}
+            outputs_class, outputs_coord_list = post_process(
+                outputs_class,
+                outputs_coord_list,
+                dn_meta,
+                self.aux_loss,
+                self._set_aux_loss,
+            )
+        out = {
+            "pred_logits": outputs_class[-1],
+            "pred_boxes": outputs_coord_list[-1],
+            "pred_keypoints": outputs_keypoints_list[-1],
+        }
 
         return out
 
 
-@MODULE_BUILD_FUNCS.registe_with_name(module_name='UniPose')
+@MODULE_BUILD_FUNCS.registe_with_name(module_name="UniPose")
 def build_unipose(args):
 
     num_classes = args.num_classes
@@ -559,12 +680,10 @@ def build_unipose(args):
         dn_label_noise_ratio=args.dn_label_noise_ratio,
         dn_labelbook_size=dn_labelbook_size,
         use_label_enc=args.use_label_enc,
-
         text_encoder_type=args.text_encoder_type,
-
         binary_query_selection=binary_query_selection,
         use_cdn=use_cdn,
-        sub_sentence_present=sub_sentence_present
+        sub_sentence_present=sub_sentence_present,
     )
 
     return model
@@ -599,23 +718,24 @@ class ContrastiveAssign(nn.Module):
         """
         assert isinstance(text_dict, dict)
 
-        y = text_dict['encoded_text']
-
+        y = text_dict["encoded_text"]
 
         max_text_len = y.shape[1]
 
-
-
-        text_token_mask = text_dict['text_token_mask']
+        text_token_mask = text_dict["text_token_mask"]
 
         if self.cal_bias is not None:
             raise NotImplementedError
-            return x @ y.transpose(-1, -2) + self.cal_bias.weight.repeat(x.shape[0], x.shape[1], 1)
+            return x @ y.transpose(-1, -2) + self.cal_bias.weight.repeat(
+                x.shape[0], x.shape[1], 1
+            )
         res = x @ y.transpose(-1, -2)
-        res.masked_fill_(~text_token_mask[:, None, :], float('-inf'))
+        res.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
 
         # padding to max_text_len
-        new_res = torch.full((*res.shape[:-1], max_text_len), float('-inf'), device=res.device)
-        new_res[..., :res.shape[-1]] = res
+        new_res = torch.full(
+            (*res.shape[:-1], max_text_len), float("-inf"), device=res.device
+        )
+        new_res[..., : res.shape[-1]] = res
 
         return new_res

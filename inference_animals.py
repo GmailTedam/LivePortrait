@@ -40,7 +40,7 @@ def main():
 
     ffmpeg_dir = os.path.join(os.getcwd(), "ffmpeg")
     if osp.exists(ffmpeg_dir):
-        os.environ["PATH"] += (os.pathsep + ffmpeg_dir)
+        os.environ["PATH"] += os.pathsep + ffmpeg_dir
 
     if not fast_check_ffmpeg():
         raise ImportError(
@@ -54,8 +54,7 @@ def main():
     crop_cfg = partial_fields(CropConfig, args.__dict__)
 
     live_portrait_pipeline_animal = LivePortraitPipelineAnimal(
-        inference_cfg=inference_cfg,
-        crop_cfg=crop_cfg
+        inference_cfg=inference_cfg, crop_cfg=crop_cfg
     )
 
     # run

@@ -5,6 +5,7 @@ import torch.nn.functional as F
 # from timm.models.layers import DropPath
 from src.modules.util import DropPath
 
+
 class FeatureResizer(nn.Module):
     """
     This class takes as input a set of embeddings of dimension C1 and outputs a set of
@@ -27,19 +28,15 @@ class FeatureResizer(nn.Module):
         return output
 
 
-
-
 def l1norm(X, dim, eps=1e-8):
-    """L1-normalize columns of X
-    """
+    """L1-normalize columns of X"""
     norm = torch.abs(X).sum(dim=dim, keepdim=True) + eps
     X = torch.div(X, norm)
     return X
 
 
 def l2norm(X, dim, eps=1e-8):
-    """L2-normalize columns of X
-    """
+    """L2-normalize columns of X"""
     norm = torch.pow(X, 2).sum(dim=dim, keepdim=True).sqrt() + eps
     X = torch.div(X, norm)
     return X
@@ -104,9 +101,9 @@ class BiMultiHeadAttention(nn.Module):
         self.v_dim = v_dim
         self.l_dim = l_dim
 
-        assert (
-                self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        assert self.head_dim * self.num_heads == self.embed_dim, (
+            f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        )
         self.scale = self.head_dim ** (-0.5)
         self.dropout = dropout
 
@@ -125,7 +122,11 @@ class BiMultiHeadAttention(nn.Module):
         self._reset_parameters()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def _reset_parameters(self):
         nn.init.xavier_uniform_(self.v_proj.weight)
@@ -169,7 +170,9 @@ class BiMultiHeadAttention(nn.Module):
         value_l_states = value_l_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2)) # bs*nhead, nimg, ntxt
+        attn_weights = torch.bmm(
+            query_states, key_states.transpose(1, 2)
+        )  # bs*nhead, nimg, ntxt
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -180,29 +183,46 @@ class BiMultiHeadAttention(nn.Module):
             attn_weights = attn_weights - attn_weights.max()
 
         if self.clamp_min_for_underflow:
-            attn_weights = torch.clamp(attn_weights, min=-50000) # Do not increase -50000, data type half has quite limited range
+            attn_weights = torch.clamp(
+                attn_weights, min=-50000
+            )  # Do not increase -50000, data type half has quite limited range
         if self.clamp_max_for_overflow:
-            attn_weights = torch.clamp(attn_weights, max=50000) # Do not increase 50000, data type half has quite limited range
+            attn_weights = torch.clamp(
+                attn_weights, max=50000
+            )  # Do not increase 50000, data type half has quite limited range
 
         attn_weights_T = attn_weights.transpose(1, 2)
-        attn_weights_l = (attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[
-            0])
+        attn_weights_l = (
+            attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
+        )
         if self.clamp_min_for_underflow:
-            attn_weights_l = torch.clamp(attn_weights_l, min=-50000) # Do not increase -50000, data type half has quite limited range
+            attn_weights_l = torch.clamp(
+                attn_weights_l, min=-50000
+            )  # Do not increase -50000, data type half has quite limited range
         if self.clamp_max_for_overflow:
-            attn_weights_l = torch.clamp(attn_weights_l, max=50000) # Do not increase 50000, data type half has quite limited range
+            attn_weights_l = torch.clamp(
+                attn_weights_l, max=50000
+            )  # Do not increase 50000, data type half has quite limited range
 
         # mask vison for language
         if attention_mask_v is not None:
-            attention_mask_v = attention_mask_v[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
-            attn_weights_l.masked_fill_(attention_mask_v, float('-inf'))
+            attention_mask_v = (
+                attention_mask_v[:, None, None, :]
+                .repeat(1, self.num_heads, 1, 1)
+                .flatten(0, 1)
+            )
+            attn_weights_l.masked_fill_(attention_mask_v, float("-inf"))
 
         attn_weights_l = attn_weights_l.softmax(dim=-1)
 
         # mask language for vision
         if attention_mask_l is not None:
-            attention_mask_l = attention_mask_l[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
-            attn_weights.masked_fill_(attention_mask_l, float('-inf'))
+            attention_mask_l = (
+                attention_mask_l[:, None, None, :]
+                .repeat(1, self.num_heads, 1, 1)
+                .flatten(0, 1)
+            )
+            attn_weights.masked_fill_(attention_mask_l, float("-inf"))
         attn_weights_v = attn_weights.softmax(dim=-1)
 
         attn_probs_v = F.dropout(attn_weights_v, p=self.dropout, training=self.training)
@@ -210,7 +230,6 @@ class BiMultiHeadAttention(nn.Module):
 
         attn_output_v = torch.bmm(attn_probs_v, value_l_states)
         attn_output_l = torch.bmm(attn_probs_l, value_v_states)
-
 
         if attn_output_v.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -238,8 +257,17 @@ class BiMultiHeadAttention(nn.Module):
 
 # Bi-Direction MHA (text->image, image->text)
 class BiAttentionBlock(nn.Module):
-    def __init__(self, v_dim, l_dim, embed_dim, num_heads, dropout=0.1,
-                 drop_path=.0, init_values=1e-4, cfg=None):
+    def __init__(
+        self,
+        v_dim,
+        l_dim,
+        embed_dim,
+        num_heads,
+        dropout=0.1,
+        drop_path=0.0,
+        init_values=1e-4,
+        cfg=None,
+    ):
         """
         Inputs:
             embed_dim - Dimensionality of input and attention feature vectors
@@ -253,21 +281,29 @@ class BiAttentionBlock(nn.Module):
         # pre layer norm
         self.layer_norm_v = nn.LayerNorm(v_dim)
         self.layer_norm_l = nn.LayerNorm(l_dim)
-        self.attn = BiMultiHeadAttention(v_dim=v_dim,
-                                         l_dim=l_dim,
-                                         embed_dim=embed_dim,
-                                         num_heads=num_heads,
-                                         dropout=dropout)
+        self.attn = BiMultiHeadAttention(
+            v_dim=v_dim,
+            l_dim=l_dim,
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            dropout=dropout,
+        )
 
         # add layer scale for training stability
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.gamma_v = nn.Parameter(init_values * torch.ones((v_dim)), requires_grad=False)
-        self.gamma_l = nn.Parameter(init_values * torch.ones((l_dim)), requires_grad=False)
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.gamma_v = nn.Parameter(
+            init_values * torch.ones((v_dim)), requires_grad=False
+        )
+        self.gamma_l = nn.Parameter(
+            init_values * torch.ones((l_dim)), requires_grad=False
+        )
 
     def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):
         v = self.layer_norm_v(v)
         l = self.layer_norm_l(l)
-        delta_v, delta_l = self.attn(v, l, attention_mask_v=attention_mask_v, attention_mask_l=attention_mask_l)
+        delta_v, delta_l = self.attn(
+            v, l, attention_mask_v=attention_mask_v, attention_mask_l=attention_mask_l
+        )
         # v, l = v + delta_v, l + delta_l
         v = v + self.drop_path(self.gamma_v * delta_v)
         l = l + self.drop_path(self.gamma_l * delta_l)
